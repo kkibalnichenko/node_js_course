@@ -8,6 +8,7 @@
     "nodemon": "^3.0.3"
   },
   "scripts": {
-    "task1": "nodemon task1_runner.js"
+    "task1": "nodemon task1_runner.js",
+    "task2": "nodemon task2_runner.js"
   }
 }
