@@ -9,6 +9,10 @@
   },
   "scripts": {
     "task1": "nodemon task1_runner.js",
-    "task2": "nodemon task2_runner.js"
+    "task2": "nodemon task2_runner.js",
+    "task3": "nodemon task3.js"
+  },
+  "dependencies": {
+    "csvtojson": "^2.0.10"
   }
 }
