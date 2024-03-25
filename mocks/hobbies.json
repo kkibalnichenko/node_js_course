@@ -1,0 +1,1 @@
+{"data":[{"hobbies":["cooking","reading","hiking"],"links":{"self":"/api/users/e5d79bb4-5d3f-4917-80a9-f915288ef0ab/hobbies","user":"/api/users/e5d79bb4-5d3f-4917-80a9-f915288ef0ab"}},{"hobbies":["cooking"],"links":{"self":"/api/users/502fa977-7ed4-427f-b2c1-badf4aece281/hobbies","user":"/api/users/502fa977-7ed4-427f-b2c1-badf4aece281"}}],"error":null}
