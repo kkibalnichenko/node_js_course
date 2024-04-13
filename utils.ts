@@ -5,13 +5,12 @@ import jwt, { Secret } from 'jsonwebtoken';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-import { CreatedUser, NewUser } from './interfaces/user.interface';
-import { Product } from './interfaces/product.interface';
+import { NewUser } from './interfaces/user.interface';
 import { Cart } from './interfaces/cart.interface';
 import { returnError, ValidationErrors } from './constants/errors';
-import { default as mockUsers } from './mocks/users.json';
-import { default as mockProducts } from './mocks/products.json';
-import { default as mockCarts } from './mocks/carts.json';
+import { getUserByEmail, getUserById} from './repositories/user.repository';
+import { getProductById } from './repositories/product.repository';
+import { getCart } from './repositories/cart.repository';
 
 const JWT_KEY = process.env.JWT_KEY as Secret;
 
@@ -38,14 +37,11 @@ export const checkAuth = (req: Request, res: Response, next: NextFunction) => {
     }
 };
 
-export const checkIfUserExist = (req: Request, res: Response, next: NextFunction) => {
+export const checkIfUserExist = async (req: Request, res: Response, next: NextFunction) => {
     if (req.headers['x-user-id']) {
-        let user = {} as CreatedUser;
-        if (!!mockUsers.length) {
-            user = mockUsers.find((user: CreatedUser) => user.id === req.headers['x-user-id']) || {} as CreatedUser;
-            if (!user?.id) {
-                return res.status(403).json(returnError(ValidationErrors.userIsNotAuthorized));
-            }
+        const user = await getUserById(req.headers['x-user-id'] as string);
+        if (!user) {
+            return res.status(403).json(returnError(ValidationErrors.userIsNotAuthorized));
         }
 
         next();
@@ -54,41 +50,31 @@ export const checkIfUserExist = (req: Request, res: Response, next: NextFunction
     }
 };
 
-export const registerValidation = (req: Request, res: Response, next: NextFunction) => {
+export const registerValidation = async (req: Request, res: Response, next: NextFunction) => {
     const { email } = req.body;
-    let isExistingEmail = false;
-    if (!!mockUsers.length) {
-        isExistingEmail = mockUsers.some((user: CreatedUser) => user.email === email);
-    }
+    const user = await getUserByEmail(email);
 
-    if (!email || isExistingEmail || !EmailValidator.validate(email)) {
+    if (!email || user || !EmailValidator.validate(email)) {
         return res.status(400).json( returnError(ValidationErrors.invalidEmail) );
     }
 
     next();
 }
 
-export const loginValidation = (req: Request, res: Response, next: NextFunction) => {
+export const loginValidation = async (req: Request, res: Response, next: NextFunction) => {
     const { email } = req.body;
-    if (!!mockUsers.length) {
-        const user = mockUsers.find(elem => elem.email === email);
-        if (!user) {
-            return res.status(404).json( returnError(ValidationErrors.userNotExist) );
-        }
-    } else {
+    const user = await getUserByEmail(email);
+
+    if (!user) {
         return res.status(404).json( returnError(ValidationErrors.userNotExist) );
     }
 
     next();
 }
 
-export const checkProductByIdValidation = (req: Request, res: Response, next: NextFunction) => {
+export const checkProductByIdValidation = async (req: Request, res: Response, next: NextFunction) => {
     const { productId } = req.params;
-    const products: Product[] = mockProducts || [];
-    let product: Product | undefined;
-    if (products.length) {
-        product = products.find((item: Product) => item.id === productId);
-    }
+    const product = await getProductById(productId);
 
     if (!product) {
         return res.status(404).json( returnError(ValidationErrors.noProductById) );
@@ -97,20 +83,16 @@ export const checkProductByIdValidation = (req: Request, res: Response, next: Ne
     next();
 }
 
-export const updateCartValidation = (req: Request, res: Response, next: NextFunction) => {
+export const updateCartValidation = async (req: Request, res: Response, next: NextFunction) => {
     const { productId } = req.body;
     const userId = req.headers['x-user-id'] as string;
 
-    let isExistingProduct = false;
-    if (!!mockProducts.length) {
-        isExistingProduct = mockProducts.some((product) => product.id === productId);
-    }
-    if (!isExistingProduct) {
+    const product = await getProductById(productId);
+    if (!product) {
         return res.status(400).json( returnError(ValidationErrors.invalidProduct) );
     }
 
-    let carts: Cart[] = mockCarts || [];
-    const cart = carts.find((item: Cart) => item.userId === userId) as Cart;
+    const cart = await getCart(userId);
     if (!cart) {
         return res.status(404).json( returnError(ValidationErrors.cartNotFound) );
     }
@@ -118,15 +100,12 @@ export const updateCartValidation = (req: Request, res: Response, next: NextFunc
     next();
 }
 
-export const cartNotEmpty = (req: Request, res: Response, next: NextFunction) => {
+export const cartNotEmpty = async (req: Request, res: Response, next: NextFunction) => {
     const userId = req.headers['x-user-id'] as string;
-    let carts: Cart[] = mockCarts || [];
-    let cart;
-    if (carts.length) {
-        cart = carts.find((item: Cart) => item.userId === userId) as Cart;
-    }
+    const cartResponse = await getCart(userId);
+    const cart = cartResponse?.data?.cart as Cart;
 
-    if (!carts.length || !cart || cart.isDeleted || !cart?.items?.length) {
+    if (!cart || cart?.isDeleted || !cart?.items?.length) {
         return res.status(400).json( returnError(ValidationErrors.cartIsEmpty) );
     }
 

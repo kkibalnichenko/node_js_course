@@ -1,35 +1,34 @@
 import { compare, hash } from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
 import jwt, { Secret } from 'jsonwebtoken';
+import { HydratedDocument } from 'mongoose';
 import * as dotenv from 'dotenv';
-dotenv.config();
 
-import { CreateUserResponse, CreatedUser, NewUser, User, LoginUserResponse } from '../interfaces/user.interface';
-import { default as mockUsers } from '../mocks/users.json';
-import { writeToFile } from '../utils';
+import { CreatedUser, CreateUserResponse, LoginUserResponse, NewUser, User } from '../interfaces/user.interface';
 import { ValidationErrors } from '../constants/errors';
+import { UserMongoose } from '../models/user.model';
+import {ProductMongoose} from "../models/product.model";
+
+dotenv.config();
 
 const JWT_KEY = process.env.JWT_KEY as Secret;
 
 export const create = ({ email, password, role }: NewUser): Promise<CreateUserResponse> => {
     return hash(password, 10)
         .then(async (hash: string) => {
-            const id = uuidv4();
-            const user: CreatedUser = {
-                id,
+            const user: HydratedDocument<CreatedUser> = new UserMongoose({
+                id: uuidv4(),
                 email,
                 password: hash,
                 role,
-            };
-            let users: CreatedUser[] = mockUsers ? [...mockUsers, user] : [user];
-            writeToFile(path.join(__dirname, '../../mocks/users.json'), users);
+            });
+            const createdUser = await user.save();
 
             return {
                 data: {
-                    id,
-                    email: user.email,
-                    role: user.role,
+                    id: createdUser.id,
+                    email: createdUser.email,
+                    role: createdUser.role,
                 },
                 error: null
             };
@@ -39,8 +38,8 @@ export const create = ({ email, password, role }: NewUser): Promise<CreateUserRe
         });
 }
 
-export const login = ({ email, password }: User): Promise<LoginUserResponse | string> => {
-    const user: NewUser = mockUsers.find(elem => elem.email === email) || {} as NewUser;
+export const login = async ({ email, password }: User): Promise<LoginUserResponse | string> => {
+    const user = await getUserByEmail(email) || {} as HydratedDocument<CreatedUser>;
     return compare(password, user.password)
         .then(async (result: boolean) => {
             if (!result) {
@@ -56,4 +55,39 @@ export const login = ({ email, password }: User): Promise<LoginUserResponse | st
         .catch((err) => {
             return err;
         });
+}
+
+export const getAllUsers = async (): Promise<HydratedDocument<CreatedUser>[]> => {
+    return await UserMongoose
+        .find() || [];
+};
+
+export const getUserById = async (id: string): Promise<HydratedDocument<CreatedUser>> => {
+    if (!id) {
+        throw new Error('Id has not been specified');
+    }
+
+    return UserMongoose
+        .findOne({ id })
+        .select('id email role');
+}
+
+export const getUserByEmail = async (email: string): Promise<HydratedDocument<CreatedUser>> => {
+    if (!email) {
+        throw new Error('Email has not been specified');
+    }
+
+    return UserMongoose
+        .findOne({ email })
+        .select('id email password role');
+}
+
+export const deleteUser = async (id: string): Promise<HydratedDocument<CreatedUser>> => {
+    if (!id) {
+        throw new Error('ID has not been specified');
+    }
+
+    return UserMongoose
+        .findByIdAndDelete(id)
+        .select('id email role');
 }

@@ -4,6 +4,7 @@
   "description": "Node.js project",
   "main": "server.js",
   "devDependencies": {
+    "@types/mongoose": "^5.11.97",
     "nodemon": "^3.0.3",
     "pm2": "^5.3.1"
   },
@@ -24,6 +25,7 @@
     "email-validator": "^2.0.4",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.3.0",
     "typescript": "^5.4.3",
     "uuid": "^9.0.1"
   }
