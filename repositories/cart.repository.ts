@@ -5,9 +5,7 @@ import { Cart, CartItem, CartResponse, EmptySuccessResponse, UpdateCartRequestBo
 import { getById } from './product.repository';
 import { CheckoutResponse, Order } from '../interfaces/order.interface';
 import { CartMongoose } from '../models/cart.model';
-import {Product} from "../interfaces/product.interface";
-import {ProductMongoose} from "../models/product.model";
-import {OrderMongoose} from "../models/order.model";
+import { OrderMongoose } from '../models/order.model';
 
 const MOCK_DATA = {
     payment: {

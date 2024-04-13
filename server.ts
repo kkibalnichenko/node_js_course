@@ -45,7 +45,3 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
     res.status(500).send( returnError(ValidationErrors.serverError) );
 });
-
-// app.listen(port, () => {
-//     console.log(`now listening on port ${port}`);
-// });
