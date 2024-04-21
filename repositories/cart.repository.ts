@@ -1,11 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
+import { HydratedDocument } from 'mongoose';
 
-import { default as mockCarts } from '../mocks/carts.json';
 import { Cart, CartItem, CartResponse, EmptySuccessResponse, UpdateCartRequestBody } from '../interfaces/cart.interface';
-import { writeToFile } from '../utils';
 import { getById } from './product.repository';
 import { CheckoutResponse, Order } from '../interfaces/order.interface';
+import { CartMongoose } from '../models/cart.model';
+import { OrderMongoose } from '../models/order.model';
 
 const MOCK_DATA = {
     payment: {
@@ -17,133 +17,198 @@ const MOCK_DATA = {
         type: 'post',
         address: 'London',
     },
-    comments: '',
+    comments: 'mock comments',
 };
 
-export const getCart = (userId: string): Promise<CartResponse> => {
-    return new Promise((resolve, reject) => {
-        let carts: Cart[] = mockCarts || [];
-        let cart: Cart | undefined;
-        if (carts.length) {
-            cart = carts.find((item: Cart) => item.userId === userId);
-        }
+export const getCart = async (userId: string): Promise<CartResponse> => {
+    if (!userId) {
+        throw new Error('Id has not been specified');
+    }
 
-        if (!cart) {
-            cart = createUserCart(userId);
-            writeToFile(path.join(__dirname, '../../mocks/carts.json'), [...carts, cart]);
-        } else {
-            if (cart.isDeleted) {
-                cart = {...cart, isDeleted: false, items: []};
-                carts = carts.filter((item: Cart) => item.id !== cart?.id);
-                writeToFile(path.join(__dirname, '../../mocks/carts.json'), [...carts, cart]);
+    return CartMongoose.findOne({ userId })
+        .then(async (cart) => {
+            let newCart;
+            if (cart) {
+                const cartObj = cart.toObject();
+                newCart = cart;
+                if (cartObj.isDeleted) {
+                    cart.set({ ...cartObj, isDeleted: false, items: [] });
+                    newCart = await cart.save();
+                }
+            } else {
+                newCart = await createUserCart(userId);
             }
-            resolve({ data: { cart, total: calculateCartTotalPrice(cart.items) }, error: null });
-        }
-    })
+            return {
+                data: {
+                    cart: { id: newCart.id, userId: newCart.userId, isDeleted: newCart.isDeleted, items: newCart.items },
+                    total: calculateCartTotalPrice(newCart.items || [])
+                },
+                error: null,
+            };
+        })
+        .catch((err: any) => {
+            return err;
+        });
 }
 
-export const updateCart = ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<CartResponse> => {
-    return new Promise((resolve, reject) => {
-        let carts: Cart[] = mockCarts || [];
-        let cart: Cart;
-        cart = carts.find((item: Cart) => item.userId === userId) as Cart;
+export const updateCart = async ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<CartResponse> => {
+    if (!userId) {
+        throw new Error('Id has not been specified');
+    }
+    if (!productId) {
+        throw new Error('product id has not been specified');
+    }
 
-        if (cart) {
-            const cartItem = cart.items.find((item: CartItem) => item.product.id === productId);
-            if (!cartItem) {
-                getById(productId)
-                    .then((res) => {
-                        const newCartItem: CartItem = { product: res.data, count };
-                        cart = {...cart, items: [ ...cart?.items, newCartItem ] || [ newCartItem ]};
-                        carts = carts.filter((item: Cart) => item.id !== cart.id);
-                        writeToFile(path.join(__dirname, '../../mocks/carts.json'), [...carts, cart]);
-                        resolve({ data: { cart, total: calculateCartTotalPrice(cart.items) }, error: null });
-                    })
-                    .catch((err) => reject(err));
-            } else {
-                const updatedCount = cartItem.count + count;
-                if (updatedCount <= 0) {
-                    cart.items = cart.items.filter((item) => item !== cartItem);
+    return CartMongoose.findOne({ userId })
+        .then(async (cart) => {
+            let newCart;
+            if (cart) {
+                const cartObj = cart.toObject();
+                const cartItem = cartObj?.items?.find((item: CartItem) => item?.product?.id === productId);
+                if (!cartItem) {
+                    return getById(productId)
+                        .then(async (res) => {
+                            const newCartItem: CartItem = { product: res.data, count };
+                            const data = { ...cartObj, items: cartObj?.items ? [ ...cartObj?.items, newCartItem ] : [ newCartItem ]};
+                            cart.set(data);
+                            newCart = await cart.save();
+
+                            return {
+                                data: {
+                                    cart: {
+                                        id: newCart.id,
+                                        userId: newCart.userId,
+                                        isDeleted: newCart.isDeleted,
+                                        items: newCart.items.map(item => ({product: item.product, count: item.count})),
+                                    },
+                                    total: calculateCartTotalPrice(newCart.items || [])
+                                },
+                                error: null,
+                            };
+                        })
+                        .catch((err) => {
+                            return err;
+                        });
                 } else {
-                    cart.items = cart.items.map((item) => {
+                    let updatedCount = cartItem?.count + count;
+                    if (updatedCount <= 0) {
+                        updatedCount = 0;
+                    }
+                    cartObj.items = cartObj.items.map((item) => {
                         if (item === cartItem) {
                             return {...item, count: updatedCount};
                         }
 
                         return item;
                     });
+                    cart.set(cartObj);
+                    newCart = await cart.save();
+
+                    return {
+                        data: {
+                            cart: {
+                                id: newCart.id,
+                                userId: newCart.userId,
+                                isDeleted: newCart.isDeleted,
+                                items: newCart.items.map(item => ({product: item.product, count: item.count})),
+                            },
+                            total: calculateCartTotalPrice(newCart.items || [])
+                        },
+                        error: null,
+                    };
                 }
-                carts = carts.filter((item: Cart) => item.id !== cart.id);
-                writeToFile(path.join(__dirname, '../../mocks/carts.json'), [...carts, cart]);
-                resolve({ data: { cart, total: calculateCartTotalPrice(cart.items) }, error: null });
             }
-        }
-    })
+        })
+        .catch((err: any) => {
+            return err;
+        });
 }
 
 export const deleteCart = (userId: string): Promise<EmptySuccessResponse> => {
-    return new Promise((resolve, reject) => {
-        let carts: Cart[] = mockCarts || [];
-        if (carts.length) {
-            carts = carts.map((item: Cart) => {
-                if (item.userId === userId) {
-                    return {...item, isDeleted: true}
-                }
+    if (!userId) {
+        throw new Error('Id has not been specified');
+    }
 
-                return item;
-            });
-            writeToFile(path.join(__dirname, '../../mocks/carts.json'), carts);
-            resolve({ data: { success: true }, error: null });
-        }
-    })
+    return CartMongoose.findOne({ userId })
+        .then(async (cart) => {
+            if (cart) {
+                const cartObj = cart.toObject();
+                cart.set({ ...cartObj, isDeleted: true });
+                await cart.save();
+
+                return { data: { success: true }, error: null };
+            }
+        })
+        .catch((err: any) => {
+            return err;
+        });
 }
 
 export const checkoutCart = (userId: string): Promise<CheckoutResponse> => {
-    return new Promise((resolve, reject) => {
-        let carts: Cart[] = mockCarts || [];
-        if (carts.length) {
-            const cart = carts.find((item: Cart) => item.userId === userId) as Cart;
+    return CartMongoose.findOne({ userId })
+        .then(async (cart) => {
+            if (cart) {
+                const order: HydratedDocument<Order> = new OrderMongoose({
+                    id: uuidv4(),
+                    userId: cart.userId,
+                    cartId: cart.id,
+                    items: cart.items,
+                    payment: {
+                        type: MOCK_DATA.payment.type,
+                        address: MOCK_DATA.payment.address,
+                        creditCard: MOCK_DATA.payment.creditCard,
+                    },
+                    delivery: {
+                        type: MOCK_DATA.delivery.type,
+                        address: MOCK_DATA.delivery.address,
+                    },
+                    comments: MOCK_DATA.comments,
+                    status: 'created',
+                    total: calculateCartTotalPrice(cart.items),
+                });
+                const createdOrder = await order.save();
+                cart.set({ ...cart, isDeleted: true });
+                await cart.save();
 
-            carts = carts.map((item: Cart) => {
-                if (item.userId === userId) {
-                    return {...item, isDeleted: true}
-                }
-
-                return item;
-            });
-            writeToFile(path.join(__dirname, '../../mocks/carts.json'), carts);
-
-            const order: Order = {
-                id: uuidv4(),
-                userId: cart.userId,
-                cartId: cart.id,
-                items: cart.items,
-                payment: {
-                    type: MOCK_DATA.payment.type,
-                    address: MOCK_DATA.payment.address,
-                    creditCard: MOCK_DATA.payment.creditCard,
-                },
-                delivery: {
-                    type: MOCK_DATA.delivery.type,
-                    address: MOCK_DATA.delivery.address,
-                },
-                comments: MOCK_DATA.comments,
-                status: 'created',
-                total: calculateCartTotalPrice(cart.items),
-            };
-            resolve({ data: { order }, error: null });
-        }
-    })
+                return {
+                    data: {
+                        order: {
+                            id: createdOrder.id,
+                            userId: createdOrder.userId,
+                            cartId: createdOrder.cartId,
+                            items: createdOrder.items.map(item => ({product: item.product, count: item.count})),
+                            payment: {
+                                type: createdOrder.payment.type,
+                                address: createdOrder.payment.address,
+                                creditCard: createdOrder.payment.creditCard,
+                            },
+                            delivery: {
+                                type: createdOrder.delivery.type,
+                                address: createdOrder.delivery.address,
+                            },
+                            comments: createdOrder.comments,
+                            status: createdOrder.status,
+                            total: createdOrder.total,
+                        }
+                    },
+                    error: null };
+            }
+        })
+        .catch((err: any) => {
+            return err;
+        });
 }
 
-const createUserCart = (userId: string): Cart => {
-    const id = uuidv4();
-    return {
-        id,
+const createUserCart = async (userId: string): Promise<HydratedDocument<Cart>> => {
+    const cart: HydratedDocument<Cart> = new CartMongoose({
+        id: uuidv4(),
         userId,
         isDeleted: false,
         items: [],
-    }
+    });
+    await cart.save();
+
+    return cart;
 }
 
 const calculateCartTotalPrice = (cartItems: CartItem[]): number => {
