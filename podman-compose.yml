@@ -1,11 +1,12 @@
 version: '3'
 services:
-  mongo:
-    image: "mongo"
-    container_name: "nodegmp-nosql"
+  postgres-db:
+    image: "postgres:12"
+    container_name: "node-gmp-db"
+    environment:
+      - POSTGRES_USER=node_gmp
+      - POSTGRES_PASSWORD=password123
+      - POSTGRES_DB=node_gmp
     restart: always
-#    environment:
-#      - MONGO_INITDB_ROOT_USERNAME=root
-#      - MONGO_INITDB_ROOT_PASSWORD=podmanmongopassword
     ports:
-      - '27017:27017'
+      - '5432:5432'

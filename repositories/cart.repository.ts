@@ -6,6 +6,9 @@ import { getById } from './product.repository';
 import { CheckoutResponse, Order } from '../interfaces/order.interface';
 import { CartMongoose } from '../models/cart.model';
 import { OrderMongoose } from '../models/order.model';
+import { AppDataSource } from '../data-source';
+import { CartEntity } from '../entity/cart.entity';
+import { UserEntity } from '../entity/user.entity';
 
 const MOCK_DATA = {
     payment: {
@@ -20,38 +23,42 @@ const MOCK_DATA = {
     comments: 'mock comments',
 };
 
-export const getCart = async (userId: string): Promise<CartResponse> => {
+export const getCart = async (userId: string): Promise<CartResponse | undefined> => {
     if (!userId) {
         throw new Error('Id has not been specified');
     }
 
-    return CartMongoose.findOne({ userId })
-        .then(async (cart) => {
-            let newCart;
-            if (cart) {
-                const cartObj = cart.toObject();
-                newCart = cart;
-                if (cartObj.isDeleted) {
-                    cart.set({ ...cartObj, isDeleted: false, items: [] });
-                    newCart = await cart.save();
+    try {
+        const user = await AppDataSource.getRepository(UserEntity)
+            .findOne({ where: { id: userId }, relations: { cart: true } });
+
+        if (user) {
+            let cart;
+            if (user.cart) {
+                cart = user.cart;
+                if (user.cart?.isDeleted) {
+                    user.cart.isDeleted = false;
+                    cart = await AppDataSource.getRepository(CartEntity).save(user.cart);
                 }
             } else {
-                newCart = await createUserCart(userId);
+                cart = await createUserCart(user);
             }
+
             return {
                 data: {
-                    cart: { id: newCart.id, userId: newCart.userId, isDeleted: newCart.isDeleted, items: newCart.items },
-                    total: calculateCartTotalPrice(newCart.items || [])
+                    cart: { id: cart.id, userId: user.id, isDeleted: cart.isDeleted, items: cart.items },
+                    total: calculateCartTotalPrice(cart.items || [])
                 },
                 error: null,
             };
-        })
-        .catch((err: any) => {
-            return err;
-        });
+        }
+    } catch (err: any) {
+        return err;
+    }
 }
 
-export const updateCart = async ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<CartResponse> => {
+// export const updateCart = async ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<CartResponse> => {
+export const updateCart = async ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<any> => {
     if (!userId) {
         throw new Error('Id has not been specified');
     }
@@ -59,89 +66,111 @@ export const updateCart = async ({ productId, count }: UpdateCartRequestBody, us
         throw new Error('product id has not been specified');
     }
 
-    return CartMongoose.findOne({ userId })
-        .then(async (cart) => {
-            let newCart;
-            if (cart) {
-                const cartObj = cart.toObject();
-                const cartItem = cartObj?.items?.find((item: CartItem) => item?.product?.id === productId);
-                if (!cartItem) {
-                    return getById(productId)
-                        .then(async (res) => {
-                            const newCartItem: CartItem = { product: res.data, count };
-                            const data = { ...cartObj, items: cartObj?.items ? [ ...cartObj?.items, newCartItem ] : [ newCartItem ]};
-                            cart.set(data);
-                            newCart = await cart.save();
-
-                            return {
-                                data: {
-                                    cart: {
-                                        id: newCart.id,
-                                        userId: newCart.userId,
-                                        isDeleted: newCart.isDeleted,
-                                        items: newCart.items.map(item => ({product: item.product, count: item.count})),
-                                    },
-                                    total: calculateCartTotalPrice(newCart.items || [])
-                                },
-                                error: null,
-                            };
-                        })
-                        .catch((err) => {
-                            return err;
-                        });
-                } else {
-                    let updatedCount = cartItem?.count + count;
-                    if (updatedCount <= 0) {
-                        updatedCount = 0;
-                    }
-                    cartObj.items = cartObj.items.map((item) => {
-                        if (item === cartItem) {
-                            return {...item, count: updatedCount};
-                        }
-
-                        return item;
-                    });
-                    cart.set(cartObj);
-                    newCart = await cart.save();
-
-                    return {
-                        data: {
-                            cart: {
-                                id: newCart.id,
-                                userId: newCart.userId,
-                                isDeleted: newCart.isDeleted,
-                                items: newCart.items.map(item => ({product: item.product, count: item.count})),
-                            },
-                            total: calculateCartTotalPrice(newCart.items || [])
-                        },
-                        error: null,
-                    };
-                }
-            }
-        })
-        .catch((err: any) => {
-            return err;
-        });
+    // const cartRepository = AppDataSource.getRepository(CartEntity);
+    // return await cartRepository.findOne({ where: { userId } })
+    //     .then(async (cart) => {
+    //         // let newCart;
+    //         if (cart) {
+    //             console.log('updateCart cart', cart);
+    //             // const cartObj = cart.toObject();
+    //             const cartItem = cart?.items?.find((item: CartItem) => item?.product?.id === productId);
+    //             console.log('cartItem', cartItem);
+    //             if (!cartItem) {
+    //                 return getById(productId)
+    //                     .then(async (res) => {
+    //                         console.log('producr res', res);
+    //                         const newCartItem: CartItem = { product: res.data, count };
+    //                         console.log('newCartItem', newCartItem);
+    //                         // const data = { ...cart, items: cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]};
+    //                         // cart = { ...cart, items: cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]};
+    //                         // console.log('cart 103', cart);
+    //                         // cart.set(data);
+    //                         // newCart = await cart.save();
+    //                         console.log('&&&', cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]);
+    //                         await cartRepository
+    //                             .createQueryBuilder()
+    //                             // .update<CartEntity>(CartEntity, {items: cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]})
+    //                             .update<CartEntity>(CartEntity, {items: [ newCartItem ]})
+    //                             .where("id = :id", { id: cart.id })
+    //                             // .updateEntity(true)
+    //                             .execute();
+    //                         console.log('cart 112', cart);
+    //                         return {
+    //                             data: {
+    //                                 cart: {
+    //                                     id: cart.id,
+    //                                     userId: cart.userId,
+    //                                     isDeleted: cart.isDeleted,
+    //                                     items: cart.items.map(item => ({product: item.product, count: item.count})),
+    //                                 },
+    //                                 total: calculateCartTotalPrice(cart.items || [])
+    //                             },
+    //                             error: null,
+    //                         };
+    //                     })
+    //                     .catch((err) => {
+    //                         return err;
+    //                     });
+    //             } else {
+    //                 let updatedCount = cartItem?.count + count;
+    //                 if (updatedCount <= 0) {
+    //                     updatedCount = 0;
+    //                 }
+    //                 cart.items = cart.items.map((item) => {
+    //                     if (item._id === cartItem._id) {
+    //                         item.count = updatedCount;
+    //                         // return {...item, count: updatedCount};
+    //                     }
+    //
+    //                     return item;
+    //                 });
+    //                 // cart.set(cartObj);
+    //                 // newCart = await cart.save();
+    //                 await cartRepository
+    //                     .createQueryBuilder()
+    //                     .update<CartEntity>(CartEntity, cart)
+    //                     .where("id = :id", { id: cart.id })
+    //                     // .updateEntity(true)
+    //                     .execute();
+    //
+    //                 return {
+    //                     data: {
+    //                         cart: {
+    //                             id: cart.id,
+    //                             userId: cart.userId,
+    //                             isDeleted: cart.isDeleted,
+    //                             items: cart.items.map(item => ({product: item.product, count: item.count})),
+    //                         },
+    //                         total: calculateCartTotalPrice(cart.items || [])
+    //                     },
+    //                     error: null,
+    //                 };
+    //             }
+    //         }
+    //     })
+    //     .catch((err: any) => {
+    //         return err;
+    //     });
 }
 
-export const deleteCart = (userId: string): Promise<EmptySuccessResponse> => {
+export const deleteCart = async (userId: string): Promise<EmptySuccessResponse | undefined> => {
     if (!userId) {
         throw new Error('Id has not been specified');
     }
 
-    return CartMongoose.findOne({ userId })
-        .then(async (cart) => {
-            if (cart) {
-                const cartObj = cart.toObject();
-                cart.set({ ...cartObj, isDeleted: true });
-                await cart.save();
+    try {
+        const user = await AppDataSource.getRepository(UserEntity)
+            .findOne({ where: { id: userId }, relations: { cart: true } });
 
-                return { data: { success: true }, error: null };
-            }
-        })
-        .catch((err: any) => {
-            return err;
-        });
+        if (user?.cart) {
+            user.cart.isDeleted = true;
+            await AppDataSource.getRepository(CartEntity).save(user.cart);
+
+            return { data: { success: true }, error: null };
+        }
+    } catch (err: any) {
+        return err;
+    }
 }
 
 export const checkoutCart = (userId: string): Promise<CheckoutResponse> => {
@@ -199,16 +228,15 @@ export const checkoutCart = (userId: string): Promise<CheckoutResponse> => {
         });
 }
 
-const createUserCart = async (userId: string): Promise<HydratedDocument<Cart>> => {
-    const cart: HydratedDocument<Cart> = new CartMongoose({
-        id: uuidv4(),
-        userId,
-        isDeleted: false,
-        items: [],
-    });
-    await cart.save();
+const createUserCart = async (user: UserEntity): Promise<CartEntity> => {
+    const cart = new CartEntity();
+    cart.user = user;
+    cart.isDeleted = false;
+    cart.items = [];
 
-    return cart;
+    const createdCart = await AppDataSource.getRepository(CartEntity).save(cart);
+
+    return createdCart;
 }
 
 const calculateCartTotalPrice = (cartItems: CartItem[]): number => {
