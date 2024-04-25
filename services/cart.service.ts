@@ -16,7 +16,7 @@ export const getUserCart = async (userId: string): Promise<CartResponse | ErrorR
 
 export const updateUserCart = async (data: UpdateCartRequestBody, userId: string): Promise<CartResponse | ErrorResponse> => {
     try {
-        return await updateCart(data, userId);
+        return await updateCart(data, userId) as CartResponse;
     } catch {
         return new Promise((resolve, reject) => {
             reject(returnError(ValidationErrors.serverError));

@@ -1,5 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, BaseEntity } from 'typeorm';
+import {Entity, PrimaryGeneratedColumn, Column, BaseEntity, OneToOne, Relation} from 'typeorm';
 import { v4 } from 'uuid';
+import {CartEntity} from "./cart.entity";
+import {CartItemEntity} from "./cart-item.entity";
 
 @Entity()
 export class ProductEntity extends BaseEntity {
@@ -19,4 +21,9 @@ export class ProductEntity extends BaseEntity {
 
     @Column('decimal')
     price: number;
+
+    @OneToOne(() => CartItemEntity, (cartItem) => cartItem.product, {
+        cascade: true,
+    })
+    cartItem: Relation<CartItemEntity>;
 }

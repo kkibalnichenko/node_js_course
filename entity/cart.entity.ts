@@ -3,6 +3,7 @@ import { v4 } from 'uuid';
 
 import { UserEntity } from './user.entity';
 import { CartItemEntity } from './cart-item.entity';
+import { OrderEntity } from './order.entity';
 
 @Entity()
 export class CartEntity extends BaseEntity {
@@ -21,8 +22,16 @@ export class CartEntity extends BaseEntity {
     @Column()
     isDeleted: boolean;
 
-    @OneToMany(() => CartItemEntity, (items) => items.cart, {
+    // @OneToMany(() => CartItemEntity, (items) => items.cart, {
+    //     cascade: true,
+    // })
+    // items: Relation<CartItemEntity[]>;
+    @OneToMany(() => CartItemEntity, (items) => items.cart)
+    @JoinColumn()
+    items: Relation<CartItemEntity[]>;
+
+    @OneToOne(() => OrderEntity, (order) => order.cart, {
         cascade: true,
     })
-    items: Relation<CartItemEntity[]>;
+    order: Relation<OrderEntity>;
 }

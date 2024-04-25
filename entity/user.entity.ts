@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, BaseEntity, OneToOne, Relation } from 'typeorm';
+import {Entity, PrimaryGeneratedColumn, Column, BaseEntity, OneToOne, Relation, OneToMany} from 'typeorm';
 import { v4 } from 'uuid';
 
 import { UserRoles } from '../interfaces/user.interface';
 import { CartEntity } from './cart.entity';
+import {OrderEntity} from "./order.entity";
 
 @Entity()
 export class UserEntity extends BaseEntity {
@@ -33,4 +34,9 @@ export class UserEntity extends BaseEntity {
         cascade: true,
     })
     cart: Relation<CartEntity>;
+
+    @OneToMany(() => OrderEntity, (orders) => orders.user, {
+        cascade: true,
+    })
+    orders: Relation<OrderEntity>[];
 }

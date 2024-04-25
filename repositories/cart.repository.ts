@@ -1,14 +1,12 @@
-import { v4 as uuidv4 } from 'uuid';
-import { HydratedDocument } from 'mongoose';
-
-import { Cart, CartItem, CartResponse, EmptySuccessResponse, UpdateCartRequestBody } from '../interfaces/cart.interface';
-import { getById } from './product.repository';
-import { CheckoutResponse, Order } from '../interfaces/order.interface';
-import { CartMongoose } from '../models/cart.model';
-import { OrderMongoose } from '../models/order.model';
+import { CartItem, CartResponse, EmptySuccessResponse, UpdateCartRequestBody } from '../interfaces/cart.interface';
+import { getProductById } from './product.repository';
+import { CheckoutResponse } from '../interfaces/order.interface';
 import { AppDataSource } from '../data-source';
 import { CartEntity } from '../entity/cart.entity';
 import { UserEntity } from '../entity/user.entity';
+import { CartItemEntity } from '../entity/cart-item.entity';
+import { ProductEntity } from '../entity/product.entity';
+import { DeliveryEntity, OrderEntity, PaymentEntity } from '../entity/order.entity';
 
 const MOCK_DATA = {
     payment: {
@@ -34,20 +32,36 @@ export const getCart = async (userId: string): Promise<CartResponse | undefined>
 
         if (user) {
             let cart;
+            let updatedItems: CartItem[] = [];
             if (user.cart) {
-                cart = user.cart;
                 if (user.cart?.isDeleted) {
                     user.cart.isDeleted = false;
-                    cart = await AppDataSource.getRepository(CartEntity).save(user.cart);
+                    await AppDataSource.getRepository(CartEntity).save(user.cart);
                 }
+                cart = await AppDataSource.getRepository(CartEntity)
+                    .findOne({ where: { id: user?.cart?.id }, relations: { items: true } }) as CartEntity;
+                const items = await AppDataSource.getRepository(CartItemEntity)
+                    .find( { where: { cart }, relations: { product: true } });
+                items.forEach(item => {
+                    const elem = {
+                        product: {
+                            id: item.product.id,
+                            title: item.product.title,
+                            description: item.product.description,
+                            price: item.product.price
+                        },
+                        count: item.count
+                    };
+                    updatedItems.push(elem);
+                });
             } else {
                 cart = await createUserCart(user);
             }
 
             return {
                 data: {
-                    cart: { id: cart.id, userId: user.id, isDeleted: cart.isDeleted, items: cart.items },
-                    total: calculateCartTotalPrice(cart.items || [])
+                    cart: { id: cart.id, userId: user.id, isDeleted: cart.isDeleted, items: updatedItems },
+                    total: calculateCartTotalPrice(updatedItems)
                 },
                 error: null,
             };
@@ -57,8 +71,7 @@ export const getCart = async (userId: string): Promise<CartResponse | undefined>
     }
 }
 
-// export const updateCart = async ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<CartResponse> => {
-export const updateCart = async ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<any> => {
+export const updateCart = async ({ productId, count }: UpdateCartRequestBody, userId: string): Promise<CartResponse | undefined> => {
     if (!userId) {
         throw new Error('Id has not been specified');
     }
@@ -66,91 +79,75 @@ export const updateCart = async ({ productId, count }: UpdateCartRequestBody, us
         throw new Error('product id has not been specified');
     }
 
-    // const cartRepository = AppDataSource.getRepository(CartEntity);
-    // return await cartRepository.findOne({ where: { userId } })
-    //     .then(async (cart) => {
-    //         // let newCart;
-    //         if (cart) {
-    //             console.log('updateCart cart', cart);
-    //             // const cartObj = cart.toObject();
-    //             const cartItem = cart?.items?.find((item: CartItem) => item?.product?.id === productId);
-    //             console.log('cartItem', cartItem);
-    //             if (!cartItem) {
-    //                 return getById(productId)
-    //                     .then(async (res) => {
-    //                         console.log('producr res', res);
-    //                         const newCartItem: CartItem = { product: res.data, count };
-    //                         console.log('newCartItem', newCartItem);
-    //                         // const data = { ...cart, items: cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]};
-    //                         // cart = { ...cart, items: cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]};
-    //                         // console.log('cart 103', cart);
-    //                         // cart.set(data);
-    //                         // newCart = await cart.save();
-    //                         console.log('&&&', cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]);
-    //                         await cartRepository
-    //                             .createQueryBuilder()
-    //                             // .update<CartEntity>(CartEntity, {items: cart?.items ? [ ...cart?.items, newCartItem ] : [ newCartItem ]})
-    //                             .update<CartEntity>(CartEntity, {items: [ newCartItem ]})
-    //                             .where("id = :id", { id: cart.id })
-    //                             // .updateEntity(true)
-    //                             .execute();
-    //                         console.log('cart 112', cart);
-    //                         return {
-    //                             data: {
-    //                                 cart: {
-    //                                     id: cart.id,
-    //                                     userId: cart.userId,
-    //                                     isDeleted: cart.isDeleted,
-    //                                     items: cart.items.map(item => ({product: item.product, count: item.count})),
-    //                                 },
-    //                                 total: calculateCartTotalPrice(cart.items || [])
-    //                             },
-    //                             error: null,
-    //                         };
-    //                     })
-    //                     .catch((err) => {
-    //                         return err;
-    //                     });
-    //             } else {
-    //                 let updatedCount = cartItem?.count + count;
-    //                 if (updatedCount <= 0) {
-    //                     updatedCount = 0;
-    //                 }
-    //                 cart.items = cart.items.map((item) => {
-    //                     if (item._id === cartItem._id) {
-    //                         item.count = updatedCount;
-    //                         // return {...item, count: updatedCount};
-    //                     }
-    //
-    //                     return item;
-    //                 });
-    //                 // cart.set(cartObj);
-    //                 // newCart = await cart.save();
-    //                 await cartRepository
-    //                     .createQueryBuilder()
-    //                     .update<CartEntity>(CartEntity, cart)
-    //                     .where("id = :id", { id: cart.id })
-    //                     // .updateEntity(true)
-    //                     .execute();
-    //
-    //                 return {
-    //                     data: {
-    //                         cart: {
-    //                             id: cart.id,
-    //                             userId: cart.userId,
-    //                             isDeleted: cart.isDeleted,
-    //                             items: cart.items.map(item => ({product: item.product, count: item.count})),
-    //                         },
-    //                         total: calculateCartTotalPrice(cart.items || [])
-    //                     },
-    //                     error: null,
-    //                 };
-    //             }
-    //         }
-    //     })
-    //     .catch((err: any) => {
-    //         return err;
-    //     });
+    try {
+        const user = await AppDataSource.getRepository(UserEntity)
+            .findOne({ where: { id: userId }, relations: { cart: true } }) as UserEntity;
+        const cart = await AppDataSource.getRepository(CartEntity)
+            .findOne({ where: { id: user?.cart?.id }, relations: { items: true } });
+
+        if (cart) {
+            const items = await AppDataSource.getRepository(CartItemEntity)
+                .find( { where: { cart }, relations: { product: true } });
+            let updatedItems = transformCartItems(items);
+            const cartItem = updatedItems.find((item: CartItem) => item?.product?.id === productId);
+
+            if (!cartItem) {
+                const product = await getProductById(productId) as ProductEntity;
+                const newCartItem = CartItemEntity.create();
+                newCartItem.product = product;
+                newCartItem.count = count;
+                newCartItem.cart = cart;
+                const createdCartItem = await newCartItem.save();
+
+                const elem = {
+                    product: {
+                        id: product.id,
+                        title: product.title,
+                        description: product.description,
+                        price: product.price
+                    },
+                    count: createdCartItem.count
+                };
+                updatedItems.push(elem);
+
+                return {
+                    data: {
+                        cart: { id: cart.id, userId: user.id, isDeleted: cart.isDeleted, items: updatedItems },
+                        total: calculateCartTotalPrice(updatedItems)
+                    },
+                    error: null,
+                };
+            } else {
+                let updatedCount = +cartItem.count + count;
+                if (updatedCount <= 0) {
+                    updatedCount = 0;
+                }
+                items.forEach(async (item) => {
+                    if (item?.product?.id === productId) {
+                        item.count = updatedCount;
+                        await item.save();
+                    }
+                });
+                updatedItems = updatedItems.map((item) => {
+                    if (item?.product?.id === productId) {
+                        item.count = updatedCount;
+                    }
+
+                    return item;
+                });
+
+                return {
+                    data: {
+                        cart: { id: cart.id, userId: user.id, isDeleted: cart.isDeleted, items: updatedItems },
+                        total: calculateCartTotalPrice(updatedItems)
+                    },
+                    error: null,
+                };
+            }
+        }
+    } catch (err: any) {
+        return err;
+    }
 }
 
 export const deleteCart = async (userId: string): Promise<EmptySuccessResponse | undefined> => {
@@ -160,11 +157,17 @@ export const deleteCart = async (userId: string): Promise<EmptySuccessResponse |
 
     try {
         const user = await AppDataSource.getRepository(UserEntity)
-            .findOne({ where: { id: userId }, relations: { cart: true } });
+            .findOne({ where: { id: userId }, relations: { cart: true } }) as UserEntity;
 
         if (user?.cart) {
             user.cart.isDeleted = true;
             await AppDataSource.getRepository(CartEntity).save(user.cart);
+
+            const items = await AppDataSource.getRepository(CartItemEntity)
+                .find( { where: { cart: user?.cart }, relations: { product: true } });
+            items.forEach(async (item) => {
+                await CartItemEntity.delete(item._id);
+            });
 
             return { data: { success: true }, error: null };
         }
@@ -173,59 +176,70 @@ export const deleteCart = async (userId: string): Promise<EmptySuccessResponse |
     }
 }
 
-export const checkoutCart = (userId: string): Promise<CheckoutResponse> => {
-    return CartMongoose.findOne({ userId })
-        .then(async (cart) => {
-            if (cart) {
-                const order: HydratedDocument<Order> = new OrderMongoose({
-                    id: uuidv4(),
-                    userId: cart.userId,
+export const checkoutCart = async (userId: string): Promise<CheckoutResponse> => {
+    try {
+        const user = await AppDataSource.getRepository(UserEntity)
+            .findOne({ where: { id: userId }, relations: { cart: true } }) as UserEntity;
+        const cart = await AppDataSource.getRepository(CartEntity)
+            .findOne({ where: { id: user?.cart?.id }, relations: { items: true } }) as CartEntity;
+        const items = await AppDataSource.getRepository(CartItemEntity)
+            .find( { where: { cart }, relations: { product: true } });
+        const updatedItems = transformCartItems(items);
+
+        const payment = PaymentEntity.create();
+        payment.type = MOCK_DATA.payment.type;
+        payment.address = MOCK_DATA.payment.address;
+        payment.creditCard = MOCK_DATA.payment.creditCard;
+        const createdPayment = await payment.save();
+
+        const delivery = DeliveryEntity.create();
+        delivery.type = MOCK_DATA.delivery.type;
+        delivery.address = MOCK_DATA.delivery.address;
+        const createdDelivery = await delivery.save();
+
+        const order = OrderEntity.create();
+        order.user = user;
+        order.cart = cart;
+        order.items = items;
+        order.payment = createdPayment;
+        order.delivery = createdDelivery;
+        order.comments = MOCK_DATA.comments;
+        order.status = 'created';
+        order.total = calculateCartTotalPrice(updatedItems);
+        const createdOrder = await order.save();
+
+        user.cart.isDeleted = true;
+        await AppDataSource.getRepository(CartEntity).save(user.cart);
+        items.forEach(async (item) => {
+            await CartItemEntity.delete(item._id);
+        });
+
+        return {
+            data: {
+                order: {
+                    id: createdOrder._id,
+                    userId: user.id,
                     cartId: cart.id,
-                    items: cart.items,
+                    items: updatedItems,
                     payment: {
-                        type: MOCK_DATA.payment.type,
-                        address: MOCK_DATA.payment.address,
-                        creditCard: MOCK_DATA.payment.creditCard,
+                        type: payment.type,
+                        address: payment.address,
+                        creditCard: payment.creditCard,
                     },
                     delivery: {
-                        type: MOCK_DATA.delivery.type,
-                        address: MOCK_DATA.delivery.address,
+                        type: delivery.type,
+                        address: delivery.address,
                     },
-                    comments: MOCK_DATA.comments,
-                    status: 'created',
-                    total: calculateCartTotalPrice(cart.items),
-                });
-                const createdOrder = await order.save();
-                cart.set({ ...cart, isDeleted: true });
-                await cart.save();
-
-                return {
-                    data: {
-                        order: {
-                            id: createdOrder.id,
-                            userId: createdOrder.userId,
-                            cartId: createdOrder.cartId,
-                            items: createdOrder.items.map(item => ({product: item.product, count: item.count})),
-                            payment: {
-                                type: createdOrder.payment.type,
-                                address: createdOrder.payment.address,
-                                creditCard: createdOrder.payment.creditCard,
-                            },
-                            delivery: {
-                                type: createdOrder.delivery.type,
-                                address: createdOrder.delivery.address,
-                            },
-                            comments: createdOrder.comments,
-                            status: createdOrder.status,
-                            total: createdOrder.total,
-                        }
-                    },
-                    error: null };
-            }
-        })
-        .catch((err: any) => {
-            return err;
-        });
+                    comments: createdOrder.comments,
+                    status: createdOrder.status,
+                    total: createdOrder.total,
+                }
+            },
+            error: null
+        };
+    } catch (err: any) {
+        return err;
+    }
 }
 
 const createUserCart = async (user: UserEntity): Promise<CartEntity> => {
@@ -247,4 +261,22 @@ const calculateCartTotalPrice = (cartItems: CartItem[]): number => {
     );
 
     return total;
+}
+
+const transformCartItems = (items: CartItemEntity[]): CartItem[] => {
+    let updatedItems: CartItem[] = [];
+    items.forEach(item => {
+        const elem = {
+            product: {
+                id: item.product.id,
+                title: item.product.title,
+                description: item.product.description,
+                price: item.product.price
+            },
+            count: item.count
+        };
+        updatedItems.push(elem);
+    });
+
+    return updatedItems;
 }

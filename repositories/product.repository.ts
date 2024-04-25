@@ -52,15 +52,7 @@ export const getProductById = async (productId: string): Promise<ProductEntity |
     }
 
     return await AppDataSource.getRepository(ProductEntity)
-        .findOne({
-            select: {
-                id: true,
-                title: true,
-                description: true,
-                price: true,
-            },
-            where: { id: productId }
-        });
+        .findOne({ where: { id: productId } });
 }
 
 export const getById = async (productId: string): Promise<ProductResponse> => {
