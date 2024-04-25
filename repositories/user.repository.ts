@@ -43,7 +43,7 @@ export const login = async ({ email, password }: User): Promise<LoginUserRespons
                 return ValidationErrors.userNotExist;
             }
 
-            const token = jwt.sign({ email }, JWT_KEY, {expiresIn: "1h"});
+            const token = jwt.sign({ email }, JWT_KEY, {expiresIn: "2h"});
             return {
                 data: { token },
                 error: null
