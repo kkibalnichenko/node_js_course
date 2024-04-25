@@ -10,7 +10,7 @@ export const AppDataSource = new DataSource({
     database: 'node_gmp',
     entities: [join(__dirname, '**', '*.entity.{ts,js}')],
     subscribers: [],
-    migrations: [],
-    synchronize: true,
+    migrations: [join(__dirname, '**', '*.migration.{ts,js}')],
+    synchronize: false,
     logging: true,
 });

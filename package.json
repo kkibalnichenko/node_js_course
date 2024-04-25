@@ -13,7 +13,8 @@
     "start": "npx tsc --watch && pm2 start dist/server.js",
     "stop": "pm2 stop dist/server.js",
     "build": "npx tsc",
-    "typeorm": "typeorm-ts-node-commonjs"
+    "typeorm": "typeorm-ts-node-commonjs",
+    "typeorm:migrate": "npx typeorm-ts-node-esm migration:run -d data-source.ts"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
