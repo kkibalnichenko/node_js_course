@@ -4,12 +4,12 @@ export interface User {
 }
 
 export interface NewUser extends User {
-    role: UserRoles | string;
+    role: UserRoles;
 }
 
 export enum UserRoles {
-    admin,
-    user,
+    admin = 'admin',
+    user = 'user',
 }
 
 export interface CreateUserResponse {
