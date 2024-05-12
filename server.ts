@@ -6,6 +6,7 @@ import 'reflect-metadata';
 import { Server } from 'http';
 import { Socket } from 'node:net';
 
+import { router as healthRouter } from './controllers/health.controller';
 import { router as productsRouter } from './controllers/products.controller';
 import { router as cartRouter } from './controllers/cart.controller';
 import { router as authRouter } from './controllers/auth.controller';
@@ -26,6 +27,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     next();
 });
 
+app.use('/api/health', healthRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/profile/cart', cartRouter);
 app.use('/api/auth', authRouter);
