@@ -46,7 +46,7 @@ app.use('/api/auth', authRouter);
 
 (async () => {
     await AppDataSource.initialize().then(() => {
-        logger.info('Successfully connected to PostgreSQL');
+        logger.debug('Successfully connected to PostgreSQL');
         server = app.listen(port, () => logger.info(`Listening at http://localhost:${port}`));
         let connections: Socket[] = [];
         server.on('connection', (connection: Socket) => {
@@ -57,7 +57,7 @@ app.use('/api/auth', authRouter);
         });
 
         function gracefulShutdown() {
-            logger.info('Received kill signal, shutting down gracefully');
+            logger.debug('Received kill signal, shutting down gracefully');
 
             server.close(() => {
                 logger.info('Closed out remaining connections');
