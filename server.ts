@@ -5,6 +5,8 @@ import * as dotenv from 'dotenv';
 import 'reflect-metadata';
 import { Server } from 'http';
 import { Socket } from 'node:net';
+import winston from 'winston';
+import morgan from 'morgan';
 
 import { router as healthRouter } from './controllers/health.controller';
 import { router as productsRouter } from './controllers/products.controller';
@@ -17,7 +19,17 @@ dotenv.config({ path: path.join(__dirname, '/.env') });
 const port = process.env.PORT || 8000;
 const app: Express = express();
 let server: Server;
+const logger = winston.createLogger({
+    level: process.env.LOG_LEVEL || 'info',
+    format: winston.format.cli(),
+    transports: [ new winston.transports.Console() ],
+});
+const morganMiddleware = morgan(
+    ':date[web] INFO :method :url - :response-time ms',
+    { stream: { write: (message) => logger.info(message.trim()) }}
+);
 
+app.use(morganMiddleware);
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(bodyParser.json());
 
@@ -34,8 +46,8 @@ app.use('/api/auth', authRouter);
 
 (async () => {
     await AppDataSource.initialize().then(() => {
-        console.log('Successfully connected to PostgreSQL');
-        server = app.listen(port, () => console.log(`Listening at http://localhost:${port}`));
+        logger.info('Successfully connected to PostgreSQL');
+        server = app.listen(port, () => logger.info(`Listening at http://localhost:${port}`));
         let connections: Socket[] = [];
         server.on('connection', (connection: Socket) => {
             connections.push(connection);
@@ -45,15 +57,15 @@ app.use('/api/auth', authRouter);
         });
 
         function gracefulShutdown() {
-            console.log('Received kill signal, shutting down gracefully');
+            logger.info('Received kill signal, shutting down gracefully');
 
             server.close(() => {
-                console.log('Closed out remaining connections');
+                logger.info('Closed out remaining connections');
                 process.exit(0);
             });
 
             setTimeout(() => {
-                console.error('Could not close connections in time, forcefully shutting down');
+                logger.error('Could not close connections in time, forcefully shutting down');
                 process.exit(1);
             }, 10000);
 
@@ -67,7 +79,7 @@ app.use('/api/auth', authRouter);
         process.on('SIGTERM', gracefulShutdown);
         process.on('SIGINT', gracefulShutdown);
     }).catch((error: Error) => {
-        console.log(`Error connecting to PostgreSQL: ${error}`);
+        logger.error(`Error connecting to PostgreSQL: ${error}`);
     });
 })();
 
@@ -77,5 +89,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
+    logger.error(error);
     res.status(500).send( returnError(ValidationErrors.serverError) );
 });
