@@ -26,7 +26,7 @@ const logger = winston.createLogger({
 });
 const morganMiddleware = morgan(
     ':date[web] INFO :method :url - :response-time ms',
-    { stream: { write: (message) => logger.info(message.trim()) }}
+    { stream: { write: (message: string) => logger.info(message.trim()) }}
 );
 
 app.use(morganMiddleware);
